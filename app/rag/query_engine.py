@@ -1,5 +1,8 @@
 import requests
 from app.rag.retriever import retrieve
+from app.rag.claim_extractor import ClaimExtractor
+from app.rag.evidence_matcher import EvidenceMatcher
+
 
 def call_ollama(prompt: str) -> str:
     response = requests.post(
@@ -15,20 +18,22 @@ def call_ollama(prompt: str) -> str:
     return response.json()["response"]
 
 
+claim_extractor = ClaimExtractor()
+evidence_matcher = EvidenceMatcher()
+
+
 def answer_query(query: str):
     retrieved_chunks = retrieve(query)
 
     if not retrieved_chunks:
         return {
-    "query": query,
-    "answer": answer,
-    "retrieved_chunks": retrieved_chunks,
-    "sources": list({
-        c["metadata"].get("file_name", "unknown")
-        for c in retrieved_chunks
-    })
-}
-
+            "query": query,
+            "answer": "I don't know",
+            "claims": [],
+            "claim_evaluations": [],
+            "retrieved_chunks": [],
+            "sources": []
+        }
 
     context = "\n\n".join(
         f"[{c['chunk_id']}]: {c['text']}" for c in retrieved_chunks
@@ -50,8 +55,23 @@ Question:
     except Exception as e:
         answer = f"LLM unavailable. Error: {str(e)}"
 
+    # 🔹 PHASE 4 — CLAIM EXTRACTION
+    claims = claim_extractor.extract(answer)
+
+    # 🔹 PHASE 5 — EVIDENCE MATCHING
+    claim_evaluations = [
+        evidence_matcher.match(claim, retrieved_chunks)
+        for claim in claims
+    ]
+
     return {
         "query": query,
         "answer": answer,
-        "retrieved_chunks": retrieved_chunks
+        "claims": claims,
+        "claim_evaluations": claim_evaluations,
+        "retrieved_chunks": retrieved_chunks,
+        "sources": list({
+            c["metadata"].get("file_name", "unknown")
+            for c in retrieved_chunks
+        })
     }
