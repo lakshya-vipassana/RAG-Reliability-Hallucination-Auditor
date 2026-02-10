@@ -1,17 +1,22 @@
 from app.rag.index import load_index
 from app.config import TOP_K
-MIN_SCORE=0.35
-def retrieve(query: str):
+
+MIN_SCORE = 0.35
+
+def retrieve_chunks(query: str):
+    """
+    Retrieve top-k chunks above a minimum similarity score.
+    """
     index = load_index()
     retriever = index.as_retriever(similarity_top_k=TOP_K)
 
     nodes = retriever.retrieve(query)
 
     results = []
-
     for node in nodes:
-        if node.score < MIN_SCORE:
+        if node.score is not None and node.score < MIN_SCORE:
             continue
+
         results.append({
             "chunk_id": node.node_id,
             "text": node.text,

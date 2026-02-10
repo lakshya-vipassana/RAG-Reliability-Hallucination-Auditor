@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from app.rag.query_engine import answer_query
 
-app = FastAPI(title="RAG Reliability API")
+from app.rag.answering import answer_query
+
+app = FastAPI(title="RAG Reliability & Hallucination Auditor")
 
 class QueryRequest(BaseModel):
     query: str

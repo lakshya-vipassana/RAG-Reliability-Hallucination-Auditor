@@ -3,7 +3,7 @@ from llama_index.core import SimpleDirectoryReader
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import TextNode
 from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from app.rag.embeddings import get_embed_model
 
 from app.config import DATA_DIR, CHROMA_DIR, EMBED_MODEL_NAME
 
@@ -19,7 +19,7 @@ def ingest():
     print("Created chunks:", len(nodes))
 
     # 3. Initialize embedding model
-    embed_model = HuggingFaceEmbedding(model_name=EMBED_MODEL_NAME)
+    embed_model = get_embed_model(EMBED_MODEL_NAME)
 
     text_nodes = []
     texts = []

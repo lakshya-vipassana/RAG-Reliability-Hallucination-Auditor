@@ -1,7 +1,7 @@
 import chromadb
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.core import VectorStoreIndex
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from app.rag.embeddings import get_embed_model
 
 from app.config import CHROMA_DIR, EMBED_MODEL_NAME
 
@@ -12,7 +12,7 @@ def load_index():
     collection = chroma_client.get_or_create_collection("rag_docs")
 
     vector_store = ChromaVectorStore(chroma_collection=collection)
-    embed_model = HuggingFaceEmbedding(model_name=EMBED_MODEL_NAME)
+    embed_model = get_embed_model(EMBED_MODEL_NAME)
 
     index = VectorStoreIndex.from_vector_store(
         vector_store=vector_store,
