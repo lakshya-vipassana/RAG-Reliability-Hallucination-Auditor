@@ -1,17 +1,41 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+# app/main.py
+from app.rag.query_engine import answer_query
+from app.rag.metrics import compute_metrics
+from app.schemas.response import AuditResult, Claim, Evidence, Metrics
 
-from app.rag.answering import answer_query
+def main(query: str, answer: str, llm) -> AuditResult:
+    # Run the pipeline (llm parameter unused, as we use query_engine with Ollama)
+    result = answer_query(query, answer)
+    claims_data = result.get("claims", [])
+    evals = result.get("claim_evaluations", [])
 
-app = FastAPI(title="RAG Reliability & Hallucination Auditor")
+    # Build list of Claim models
+    claims = [Claim(id=c["id"], text=c["text"]) for c in claims_data]
 
-class QueryRequest(BaseModel):
-    query: str
+    # Build list of Evidence models (mapping keys)
+    evidence = []
+    for ev in evals:
+        evidence.append(Evidence(
+            claim_id=ev["claim_id"],
+            chunk_ids=ev.get("evidence", []),
+            support_level=ev["status"],
+            rationale=ev.get("rationale", ""),
+            confidence=ev.get("confidence", 0.0)
+        ))
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+    # Compute metrics
+    metrics_dict = compute_metrics(evals)
+    metrics = Metrics(**metrics_dict)
 
-@app.post("/query")
-def query_rag(req: QueryRequest):
-    return answer_query(req.query)
+    # Determine verdict
+    statuses = {e.support_level for e in evidence}
+    if not evidence:
+        verdict = "SAFE"
+    elif all(s in ("Supported", "Weakly supported") for s in statuses):
+        verdict = "SAFE"
+    elif any(s in ("Supported", "Weakly supported") for s in statuses) and any(s in ("Unsupported", "Contradicted") for s in statuses):
+        verdict = "PARTIALLY_SUPPORTED"
+    else:
+        verdict = "UNSAFE"
+
+    return AuditResult(claims=claims, evidence=evidence, metrics=metrics, verdict=verdict)

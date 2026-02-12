@@ -1,11 +1,5 @@
-import json
-from datetime import datetime
+# app/utils/logging.py
+import logging
 
-def log_trace(stage: str, payload: dict, path="storage/trace.log"):
-    record = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "stage": stage,
-        "payload": payload
-    }
-    with open(path, "a") as f:
-        f.write(json.dumps(record) + "\n")
+def setup_logging():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")

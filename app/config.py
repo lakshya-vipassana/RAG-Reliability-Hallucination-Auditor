@@ -1,11 +1,10 @@
-import os
-from dotenv import load_dotenv
+# app/config.py
+from pathlib import Path
 
-load_dotenv(dotenv_path=".env")
+# Directories
+DATA_DIR = Path("data/raw_docs")
+CHROMA_DIR = Path("data/chroma_db")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-DATA_DIR = "data/raw_docs"
-CHROMA_DIR = "storage/chroma"
-EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-TOP_K = 3
+# Model names
+EMBED_MODEL_NAME = "all-MiniLM-L6-v2"  # or any SentenceTransformer model
+TOP_K = 10

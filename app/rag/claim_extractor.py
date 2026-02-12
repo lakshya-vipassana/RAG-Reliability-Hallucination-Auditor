@@ -1,3 +1,10 @@
+# app/rag/claim_extractor.py
+
+import json
+import subprocess
+import re
+from typing import Dict, List
+
 CLAIM_EXTRACTION_PROMPT = """
 You are a claim extraction system.
 
@@ -17,7 +24,8 @@ Rules:
 7. Output MUST be valid JSON only.
 8. If no factual claims exist, return an empty list.
 
-Output schema (STRICT):
+STRICT OUTPUT FORMAT (no markdown, no explanation, no extra text):
+
 {
   "claims": [
     {"id": "C1", "text": "..."},
@@ -27,19 +35,12 @@ Output schema (STRICT):
 
 Answer:
 """
-import json
-import subprocess
-from typing import Dict, Any, List
-
 
 class ClaimExtractor:
-    def __init__(self, model_name: str = "llama3"):
+    def __init__(self, model_name: str = "llama3.1:8b"):
         self.model_name = model_name
 
     def _call_llm(self, prompt: str) -> str:
-        """
-        Calls Ollama locally. Single deterministic generation.
-        """
         result = subprocess.run(
             ["ollama", "run", self.model_name],
             input=prompt,
@@ -52,31 +53,54 @@ class ClaimExtractor:
 
         return result.stdout.strip()
 
+    def _extract_json_from_text(self, text: str) -> Dict:
+        """
+        Extract first valid JSON object from messy LLM output.
+        """
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # Remove markdown fences if present
+        text = re.sub(r"```json|```", "", text)
+
+        # Find first JSON object
+        start = text.find("{")
+        end = text.rfind("}")
+
+        if start == -1 or end == -1:
+            raise ValueError("No JSON object found in LLM output")
+
+        cleaned = text[start:end + 1]
+        return json.loads(cleaned)
+
     def extract_claims(self, answer: str) -> Dict[str, List[Dict[str, str]]]:
-        """
-        Extract atomic claims from an answer.
-        """
         full_prompt = CLAIM_EXTRACTION_PROMPT + answer
 
         try:
             raw_output = self._call_llm(full_prompt)
 
-            # HARD JSON PARSE
-            parsed = json.loads(raw_output)
+            # Debug line (can remove later)
+            print("CLAIM RAW OUTPUT:", raw_output)
 
-            # SCHEMA GUARD
+            parsed = self._extract_json_from_text(raw_output)
+
             if "claims" not in parsed or not isinstance(parsed["claims"], list):
-                raise ValueError("Invalid claim schema")
+                raise ValueError("Invalid claim schema returned")
 
-            # ENFORCE ID FORMAT
+            # Normalize IDs
             for i, claim in enumerate(parsed["claims"], start=1):
                 claim["id"] = f"C{i}"
 
             return parsed
 
         except Exception as e:
-            # Graceful degradation
+            print("CLAIM EXTRACTION ERROR:", str(e))
             return {
                 "claims": [],
                 "error": f"claim_extraction_failed: {str(e)}"
             }
+
+    def extract(self, answer: str) -> Dict[str, List[Dict[str, str]]]:
+        return self.extract_claims(answer)

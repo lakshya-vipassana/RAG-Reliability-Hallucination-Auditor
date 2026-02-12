@@ -1,8 +1,16 @@
+# app/rag/evidence_matching.py
+
+import json
+import requests
+import re
+from typing import List, Dict
+
 EVIDENCE_MATCH_PROMPT = """
 You are an evidence verification system.
 
 Task:
-Given a claim and a set of retrieved document chunks, determine whether the claim is supported.
+Given a claim and a set of retrieved document chunks, determine whether the 
+claim is supported.
 
 Rules:
 - Use ONLY the provided chunks.
@@ -13,12 +21,12 @@ Rules:
 - If no chunk addresses the claim, mark as Unsupported.
 
 Output JSON ONLY in this schema:
-{
+{{
   "status": "Supported | Weakly supported | Unsupported | Contradicted",
   "confidence": 0.0-1.0,
   "evidence": ["chunk_id"],
   "rationale": "One sentence explanation"
-}
+}}
 
 Claim:
 {claim}
@@ -26,10 +34,6 @@ Claim:
 Chunks:
 {chunks}
 """
-
-import json
-import requests
-from typing import List, Dict
 
 
 class EvidenceMatcher:
@@ -39,22 +43,37 @@ class EvidenceMatcher:
     def _call_llm(self, prompt: str) -> str:
         response = requests.post(
             "http://localhost:11434/api/generate",
-            json={
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False
-            },
+            json={"model": self.model, "prompt": prompt, "stream": False},
             timeout=60
         )
         response.raise_for_status()
         return response.json()["response"]
 
-    def _candidate_chunks(self, claim: str, chunks: List[Dict], top_k: int = 5):
-        claim_tokens = set(claim.lower().split())
+    def _extract_json(self, text: str) -> Dict:
+        # Try direct parse first
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
 
+        # Remove markdown fences
+        text = re.sub(r"```json|```", "", text)
+
+        # Extract JSON object
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1:
+            raise ValueError("No JSON found in LLM output")
+
+        cleaned = text[start:end+1]
+        return json.loads(cleaned)
+
+    def _candidate_chunks(self, claim: str, chunks: List[Dict], top_k: int = 5):
+        claim_tokens = set(re.findall(r"\w+", claim.lower()))
         scored = []
+
         for c in chunks:
-            chunk_tokens = set(c["text"].lower().split())
+            chunk_tokens = set(re.findall(r"\w+", c["text"].lower()))
             overlap = len(claim_tokens & chunk_tokens)
             if overlap > 0:
                 scored.append((overlap, c))
@@ -85,14 +104,20 @@ class EvidenceMatcher:
 
         try:
             raw = self._call_llm(prompt)
-            parsed = json.loads(raw)
+            print("EVIDENCE RAW OUTPUT:", raw)
+
+            parsed = self._extract_json(raw)
 
             return {
                 "claim_id": claim["id"],
-                **parsed
+                "status": parsed.get("status", "Unsupported"),
+                "confidence": float(parsed.get("confidence", 0.0)),
+                "evidence": parsed.get("evidence", []),
+                "rationale": parsed.get("rationale", "")
             }
 
-        except Exception:
+        except Exception as e:
+            print("EVIDENCE MATCH ERROR:", str(e))
             return {
                 "claim_id": claim["id"],
                 "status": "Unsupported",

@@ -1,5 +1,7 @@
-from typing import List, Dict
+# app/schemas/response.py
+from typing import List
 from pydantic import BaseModel
+from typing import Optional
 
 class Claim(BaseModel):
     id: str
@@ -13,10 +15,10 @@ class Evidence(BaseModel):
     confidence: float
 
 class Metrics(BaseModel):
-    faithfulness: float
-    hallucination_rate: float
-    evidence_coverage: float
-    decision_consistency: float | None = None
+    faithfulness: Optional[float] = None
+    hallucination_rate: Optional[float] = None
+    evidence_coverage: Optional[float] = None
+    decision_consistency: Optional[float] = None
 
 class AuditResult(BaseModel):
     claims: List[Claim]
